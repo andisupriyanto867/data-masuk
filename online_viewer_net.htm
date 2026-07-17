@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hitung Kendaraan - NDC Jatake</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family: 'Segoe UI', Arial, sans-serif; }
+  body {
+    background: linear-gradient(135deg, #eef2f7, #dde6f0);
+    min-height: 100vh;
+    padding: 16px;
+    color: #1f2937;
+  }
+  .container { max-width: 480px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 16px; }
+  header h1 { font-size: 20px; color: #1e3a8a; }
+  header p { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  .summary {
+    background: #1e3a8a;
+    color: white;
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px rgba(30,58,138,0.25);
+  }
+  .summary div { text-align: center; }
+  .summary .num { font-size: 26px; font-weight: 700; }
+  .summary .label { font-size: 12px; opacity: 0.85; }
+
+  .card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .btn-row { display: flex; gap: 10px; margin-bottom: 6px; }
+  button {
+    flex: 1;
+    border: none;
+    border-radius: 10px;
+    padding: 16px 0;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  button:active:not(:disabled) { transform: scale(0.95); }
+  .btn-masuk { background: #16a34a; color: white; }
+  .btn-keluar { background: #dc2626; color: white; }
+  .btn-refresh { background: #eef2ff; color: #1e3a8a; margin-top: 4px; font-size: 13px; padding: 10px 0; }
+
+  .status {
+    text-align: center;
+    font-size: 13px;
+    padding: 8px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.success { background: #dcfce7; color: #166534; }
+  .status.error { background: #fee2e2; color: #991b1b; }
+
+  .card-title { font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+  .log { max-height: 260px; overflow-y: auto; font-size: 12.5px; }
+  .log-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .log-item .tgl { color: #94a3b8; }
+  .log-item .masuk { color: #16a34a; font-weight: 600; }
+  .log-item .keluar { color: #dc2626; font-weight: 600; }
+  .empty { text-align:center; color:#94a3b8; padding: 10px 0; font-size: 13px; }
+  .loading { text-align:center; color:#94a3b8; padding: 10px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🚛 Hitung Kendaraan</h1>
+    <p>NDC Jatake - Pos Keluar Masuk</p>
+  </header>
+
+  <div class="summary">
+    <div>
+      <div class="num" id="totalMasuk">-</div>
+      <div class="label">Total Masuk</div>
+    </div>
+    <div>
+      <div class="num" id="totalKeluar">-</div>
+      <div class="label">Total Keluar</div>
+    </div>
+    <div>
+      <div class="num" id="totalDalam">-</div>
+      <div class="label">Sedang di Area</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="statusMsg" class="status"></div>
+    <div class="btn-row">
+      <button class="btn-masuk" id="btnMasuk" onclick="catatMasuk()">+ Kendaraan Masuk</button>
+      <button class="btn-keluar" id="btnKeluar" onclick="catatKeluar()">+ Kendaraan Keluar</button>
+    </div>
+    <button class="btn-refresh" onclick="loadData()">🔄 Refresh Data</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 Riwayat</div>
+    <div class="log" id="logArea">
+      <div class="loading">Memuat data...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // GANTI dengan URL Web App Apps Script kamu
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbybHHXfo-Fr_FRUYzgXhPL7oMmQqT7-f5jIi-76VRhP5WYDUwhV05jmPds4zxXPbHNsuQ/exec';
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('statusMsg');
+    el.textContent = msg;
+    el.className = 'status show ' + type;
+    setTimeout(() => el.className = 'status', 3000);
+  }
+
+  function setButtonsDisabled(disabled) {
+    document.getElementById('btnMasuk').disabled = disabled;
+    document.getElementById('btnKeluar').disabled = disabled;
+  }
+
+  async function catatMasuk() {
+    setButtonsDisabled(true);
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'masuk' })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        showStatus('✅ Kendaraan masuk jam ' + data.jam, 'success');
+        loadData();
+      } else {
+        showStatus('⚠️ ' + data.message, 'error');
+      }
+    } catch (err) {
+      showStatus('⚠️ Gagal terhubung ke server', 'error');
+    } finally {
+      setButtonsDisabled(false);
+    }
+  }
+
+  async function catatKeluar() {
+    setButtonsDisabled(true);
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'keluar' })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        showStatus('✅ Kendaraan keluar jam ' + data.jam, 'success');
+        loadData();
+      } else {
+        showStatus('⚠️ ' + data.message, 'error');
+      }
+    } catch (err) {
+      showStatus('⚠️ Gagal terhubung ke server', 'error');
+    } finally {
+      setButtonsDisabled(false);
+    }
+  }
+
+  async function loadData() {
+    document.getElementById('logArea').innerHTML = '<div class="loading">Memuat data...</div>';
+    try {
+      const res = await fetch(SCRIPT_URL);
+      const data = await res.json();
+
+      document.getElementById('totalMasuk').textContent = data.totalMasuk;
+      document.getElementById('totalKeluar').textContent = data.totalKeluar;
+      document.getElementById('totalDalam').textContent = data.sedangDiArea;
+
+      const area = document.getElementById('logArea');
+      if (!data.logs || data.logs.length === 0) {
+        area.innerHTML = '<div class="empty">Belum ada aktivitas</div>';
+        return;
+      }
+      area.innerHTML = data.logs.slice(0, 30).map(l => `
+        <div class="log-item">
+          <span class="tgl">${l.timestamp}</span>
+          <span class="masuk">${l.jamMasuk || '-'}</span>
+          <span class="keluar">${l.jamKeluar || 'belum keluar'}</span>
+        </div>
+      `).join('');
+    } catch (err) {
+      document.getElementById('logArea').innerHTML = '<div class="empty">Gagal memuat data</div>';
+    }
+  }
+
+  loadData();
+  setInterval(loadData, 15000); // auto-refresh tiap 15 detik
+</script>
+</body>
+</html>
